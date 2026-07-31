@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Etched — загрузчик музыки</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #191c23; --line: #2a2e37; --text: #e7e9ee;
+    --muted: #9aa0ad; --accent: #6ea8fe; --accent2: #477987; --ok: #4caf50; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 560px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 16px; padding: 28px;
+  }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 12px; padding: 40px 20px;
+    text-align: center; cursor: pointer; transition: .15s; background: #12141a;
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); background: #151a24; }
+  .drop strong { color: var(--accent); }
+  .drop small { display: block; color: var(--muted); margin-top: 8px; }
+  input[type=file] { display: none; }
+  .pw { margin-top: 14px; display: none; }
+  .pw.show { display: block; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input[type=password] {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: #12141a; color: var(--text); font-size: 14px;
+  }
+  .status { margin-top: 16px; font-size: 14px; min-height: 20px; }
+  .status.err { color: var(--err); }
+  .status.ok { color: var(--ok); }
+  .bar { height: 6px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 12px; display: none; }
+  .bar.show { display: block; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .result { margin-top: 18px; display: none; }
+  .result.show { display: block; }
+  .field { margin-bottom: 12px; }
+  .field label { display: flex; justify-content: space-between; align-items: center; }
+  .field .badge { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .row { display: flex; gap: 8px; }
+  .row input {
+    flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: #12141a; color: var(--text); font-size: 13px; font-family: ui-monospace, monospace;
+  }
+  button.copy {
+    padding: 10px 14px; border: 1px solid var(--line); background: #232833; color: var(--text);
+    border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap;
+  }
+  button.copy:hover { border-color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .footer { color: var(--muted); font-size: 12px; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+  code { background: #12141a; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>💿 Загрузчик для Etched</h1>
+    <p class="sub" id="repoline">Кинь mp3/ogg/wav — получишь прямую ссылку для пластинки.</p>
+
+    <div class="drop" id="drop">
+      <div><strong>Перетащи файл сюда</strong> или нажми, чтобы выбрать</div>
+      <small id="limits">mp3, ogg, wav, opus, flac, m4a, aac</small>
+    </div>
+    <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.opus,.flac,.m4a,.aac" />
+
+    <div class="pw" id="pwWrap">
+      <label for="pw">Пароль загрузки</label>
+      <input type="password" id="pw" placeholder="введите пароль" />
+    </div>
+
+    <div class="bar" id="bar"><i id="barfill"></i></div>
+    <div class="status" id="status"></div>
+
+    <div class="result" id="result">
+      <div class="field">
+        <label>Ссылка для Etched <span class="badge">jsDelivr · рекомендуется</span></label>
+        <div class="row">
+          <input type="text" id="jsdelivr" readonly />
+          <button class="copy" data-target="jsdelivr">Копировать</button>
+        </div>
+        <div class="hint">CDN, быстрее и стабильнее из РФ. Первое открытие может кэшироваться пару минут.</div>
+      </div>
+      <div class="field">
+        <label>Прямая raw-ссылка <span class="badge">GitHub</span></label>
+        <div class="row">
+          <input type="text" id="raw" readonly />
+          <button class="copy" data-target="raw">Копировать</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Файл сохраняется в GitHub-репозиторий и доступен по постоянной ссылке.
+      Вставь её в стол прожига (etching table) в Minecraft.
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const drop = $("drop"), fileInput = $("file"), statusEl = $("status");
+  const bar = $("bar"), barfill = $("barfill"), result = $("result");
+  let cfg = { passwordRequired: false, maxUploadMb: 50 };
+
+  // Load server config (repo name, size limit, whether a password is needed).
+  fetch("/api/config").then(r => r.json()).then(c => {
+    cfg = c;
+    $("repoline").textContent = `Репозиторий: ${c.repo} · до ${c.maxUploadMb} МБ`;
+    $("limits").textContent = (c.allowedExtensions || []).join(", ") + ` · до ${c.maxUploadMb} МБ`;
+    if (c.passwordRequired) $("pwWrap").classList.add("show");
+  }).catch(() => {});
+
+  drop.addEventListener("click", () => fileInput.click());
+  ["dragenter", "dragover"].forEach(e =>
+    drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach(e =>
+    drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove("drag"); }));
+  drop.addEventListener("drop", ev => {
+    if (ev.dataTransfer.files.length) upload(ev.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) upload(fileInput.files[0]);
+  });
+
+  function setStatus(msg, cls) {
+    statusEl.textContent = msg;
+    statusEl.className = "status" + (cls ? " " + cls : "");
+  }
+
+  function upload(file) {
+    result.classList.remove("show");
+    if (cfg.passwordRequired && !$("pw").value) {
+      setStatus("Введите пароль загрузки.", "err");
+      return;
+    }
+    setStatus(`Загружаю «${file.name}»…`);
+    bar.classList.add("show"); barfill.style.width = "0%";
+
+    const fd = new FormData();
+    fd.append("file", file);
+    if (cfg.passwordRequired) fd.append("password", $("pw").value);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload");
+    if (cfg.passwordRequired) xhr.setRequestHeader("x-upload-password", $("pw").value);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) barfill.style.width = Math.round((e.loaded / e.total) * 100) + "%";
+    };
+    xhr.onload = () => {
+      bar.classList.remove("show");
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
+        setStatus("Готово! Ссылка ниже 👇", "ok");
+        $("jsdelivr").value = data.jsdelivrUrl;
+        $("raw").value = data.rawUrl;
+        result.classList.add("show");
+      } else {
+        setStatus(data.error || `Ошибка ${xhr.status}`, "err");
+      }
+    };
+    xhr.onerror = () => { bar.classList.remove("show"); setStatus("Сеть недоступна.", "err"); };
+    xhr.send(fd);
+  }
+
+  document.querySelectorAll("button.copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const el = $(btn.dataset.target);
+      el.select();
+      try { await navigator.clipboard.writeText(el.value); }
+      catch { document.execCommand("copy"); }
+      const old = btn.textContent; btn.textContent = "Скопировано ✓";
+      setTimeout(() => (btn.textContent = old), 1500);
+    });
+  });
+</script>
+</body>
+</html>

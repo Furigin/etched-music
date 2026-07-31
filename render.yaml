@@ -1,0 +1,25 @@
+# Render Blueprint — публичный деплой в пару кликов.
+# На render.com → New → Blueprint → подключи репозиторий Furigin/etched-music.
+# Значения GITHUB_TOKEN / OWNER / REPO / UPLOAD_PASSWORD впишешь в дашборде (они секретные).
+services:
+  - type: web
+    name: etched-uploader
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_OWNER
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: GITHUB_BRANCH
+        value: main
+      - key: UPLOAD_DIR
+        value: audio
+      - key: MAX_UPLOAD_MB
+        value: "50"
+      - key: UPLOAD_PASSWORD
+        sync: false
